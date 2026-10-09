@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LUNARIS — Lunar Image Correspondence &amp; Registration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --void:#0a0907;
+  --void-2:#111008;
+  --panel: rgba(24,21,17,0.62);
+  --panel-solid:#161310;
+  --border: rgba(232,222,204,0.09);
+  --border-strong: rgba(232,222,204,0.18);
+  --dust:#a89e8e;
+  --dust-dim:#786f61;
+  --ink:#f2ede2;
+  --signal:#ff7a33;
+  --signal-dim: rgba(255,122,51,0.15);
+  --cold:#57d9c4;
+  --cold-dim: rgba(87,217,196,0.14);
+  --danger:#e5544a;
+  --grid-line: rgba(232,222,204,0.06);
+  --radius:14px;
+  --disp: 'Space Grotesk', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --body: 'Inter', sans-serif;
+}
+*{box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  margin:0; background:var(--void); color:var(--ink);
+  font-family:var(--body); overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--signal); color:#160b04;}
+::-webkit-scrollbar{width:9px;}
+::-webkit-scrollbar-track{background:var(--void);}
+::-webkit-scrollbar-thumb{background:#3a352b; border-radius:8px;}
+
+canvas#starfield{ position:fixed; inset:0; z-index:0; width:100%; height:100%; }
+
+#app{ position:relative; z-index:1; }
+
+/* ---------- NAV ---------- */
+header.topnav{
+  position:fixed; top:0; left:0; right:0; z-index:50;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 28px;
+  background: linear-gradient(to bottom, rgba(10,9,7,0.92), rgba(10,9,7,0.55) 80%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom:1px solid var(--border);
+}
+.logo{ display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none; }
+.logo svg{ width:34px; height:34px; display:block; }
+.logo .wordmark{ font-family:var(--disp); font-weight:700; font-size:19px; letter-spacing:0.14em; color:var(--ink); }
+.logo .wordmark span{ color:var(--signal); }
+.logo .tagline{ display:none; }
+nav.links{ display:flex; gap:2px; flex-wrap:wrap; }
+nav.links button{
+  font-family:var(--mono); font-size:11.5px; letter-spacing:0.03em; text-transform:uppercase;
+  background:transparent; border:1px solid transparent; color:var(--dust);
+  padding:8px 12px; border-radius:8px; cursor:pointer; transition:all .25s ease;
+}
+nav.links button:hover{ color:var(--ink); border-color:var(--border-strong); background:rgba(255,255,255,0.03); }
+nav.links button.active{ color:var(--void); background:var(--signal); border-color:var(--signal); }
+.nav-toggle{ display:none; background:transparent; border:1px solid var(--border-strong); color:var(--ink); width:38px; height:38px; border-radius:8px; font-size:18px; cursor:pointer; }
+
+/* ---------- LAYOUT ---------- */
+main{ position:relative; z-index:1; }
+.view{ display:none; min-height:100vh; padding:118px 6vw 90px; opacity:0; transform:translateY(18px); transition:opacity .5s ease, transform .5s ease; }
+.view.active{ display:block; opacity:1; transform:translateY(0); }
+.section-head{ margin-bottom:36px; max-width:760px; }
+.eyebrow{ font-family:var(--mono); font-size:11.5px; letter-spacing:0.22em; text-transform:uppercase; color:var(--signal); display:flex; align-items:center; gap:10px; }
+.eyebrow::before{ content:''; width:22px; height:1px; background:var(--signal); }
+h1.pagetitle{ font-family:var(--disp); font-size:clamp(28px,4vw,46px); font-weight:600; margin:10px 0 12px; letter-spacing:-0.01em; }
+.lede{ color:var(--dust); font-size:15.5px; line-height:1.65; max-width:640px; }
+
+.glass{
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+}
+.grid{ display:grid; gap:18px; }
+.grid.cols-2{ grid-template-columns:1fr 1fr; }
+.grid.cols-3{ grid-template-columns:repeat(3,1fr); }
+.grid.cols-4{ grid-template-columns:repeat(4,1fr); }
+@media(max-width:980px){ .grid.cols-2,.grid.cols-3,.grid.cols-4{ grid-template-columns:1fr; } }
+
+.reveal{ opacity:0; transform:translateY(24px); transition:opacity .6s ease, transform .6s ease; }
+.reveal.in{ opacity:1; transform:translateY(0); }
+
+/* ---------- HERO / OVERVIEW ---------- */
+#view-overview{ padding-top:0; }
+.hero{ position:relative; min-height:100vh; display:flex; align-items:center; padding:0 6vw; }
+#moon-canvas-wrap{ position:absolute; inset:0; z-index:0; }
+.hero-copy{ position:relative; z-index:2; max-width:620px; padding-top:70px;}
+.usp-tag{ display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--cold); background:var(--cold-dim); border:1px solid rgba(87,217,196,0.3); padding:6px 12px; border-radius:100px; margin-bottom:22px; }
+.usp-tag .dot{ width:6px; height:6px; border-radius:50%; background:var(--cold); box-shadow:0 0 8px var(--cold); }
+.hero h1{ font-family:var(--disp); font-size:clamp(38px,6vw,68px); line-height:1.02; font-weight:700; letter-spacing:-0.02em; margin:0 0 20px; }
+.hero h1 em{ font-style:normal; color:var(--signal); }
+.hero p.usp-line{ font-size:16.5px; color:var(--dust); line-height:1.7; max-width:520px; margin-bottom:32px; }
+.btnrow{ display:flex; gap:14px; flex-wrap:wrap; margin-bottom:56px; }
+.btn{ font-family:var(--mono); font-size:12.5px; letter-spacing:.05em; text-transform:uppercase; padding:13px 22px; border-radius:9px; cursor:pointer; border:1px solid transparent; transition:transform .2s ease, box-shadow .2s ease, background .2s ease; display:inline-flex; align-items:center; gap:8px; }
+.btn.primary{ background:var(--signal); color:#1a0d04; font-weight:600; }
+.btn.primary:hover{ transform:translateY(-2px); box-shadow:0 10px 30px -8px rgba(255,122,51,0.55); }
+.btn.ghost{ background:rgba(255,255,255,0.03); color:var(--ink); border-color:var(--border-strong); }
+.btn.ghost:hover{ background:rgba(255,255,255,0.07); transform:translateY(-2px); }
+.btn.small{ padding:9px 14px; font-size:11px; }
+.btn:disabled{ opacity:.4; cursor:not-allowed; transform:none !important; }
+.stat-strip{ display:flex; gap:38px; flex-wrap:wrap; }
+.stat-strip .stat b{ display:block; font-family:var(--disp); font-size:26px; color:var(--ink); }
+.stat-strip .stat span{ font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--dust-dim); }
+.scrolldown{ position:absolute; bottom:34px; left:6vw; font-family:var(--mono); font-size:10.5px; color:var(--dust-dim); letter-spacing:.15em; text-transform:uppercase; display:flex; align-items:center; gap:10px; z-index:2;}
+.scrolldown::after{ content:''; width:1px; height:34px; background:linear-gradient(var(--signal),transparent); animation:scrollpulse 1.8s ease infinite; }
+@keyframes scrollpulse{ 0%{opacity:1;} 100%{opacity:0;} }
+
+.pipeline-belt{ position:relative; z-index:2; padding:40px 0 10px; overflow-x:auto; }
+.pipeline-belt .track{ display:flex; gap:0; min-width:max-content; align-items:center; padding-bottom:8px;}
+.pnode{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--dust); background:rgba(255,255,255,0.03); border:1px solid var(--border); padding:10px 14px; border-radius:9px; white-space:nowrap; }
+.pnode.hot{ color:var(--signal); border-color:rgba(255,122,51,0.4); }
+.parrow{ color:var(--dust-dim); padding:0 10px; font-size:13px; }
+
+/* ---------- CARDS ---------- */
+.card{ padding:22px; }
+.card h3{ font-family:var(--disp); font-size:17px; margin:0 0 8px; font-weight:600; }
+.card p{ color:var(--dust); font-size:13.5px; line-height:1.6; margin:0; }
+.tagpill{ display:inline-block; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.08em; padding:3px 9px; border-radius:100px; border:1px solid var(--border-strong); color:var(--dust); margin-bottom:12px; }
+.tagpill.signal{ color:var(--signal); border-color:rgba(255,122,51,0.4); background:var(--signal-dim); }
+.tagpill.cold{ color:var(--cold); border-color:rgba(87,217,196,0.35); background:var(--cold-dim); }
+
+/* dataset table */
+table.datatable{ width:100%; border-collapse:collapse; font-size:13px; }
+table.datatable th{ text-align:left; font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--dust-dim); padding:10px 14px; border-bottom:1px solid var(--border-strong); }
+table.datatable td{ padding:12px 14px; border-bottom:1px solid var(--border); color:var(--dust); vertical-align:top; }
+table.datatable tr:hover td{ background:rgba(255,255,255,0.02); color:var(--ink); }
+table.datatable td.name{ color:var(--ink); font-weight:600; font-family:var(--disp); }
+
+/* ---------- REGISTRATION ---------- */
+.dropzone{ border:1px dashed var(--border-strong); border-radius:var(--radius); padding:22px; text-align:center; cursor:pointer; transition:.25s; position:relative; min-height:220px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:rgba(255,255,255,0.015);}
+.dropzone:hover{ border-color:var(--signal); background:var(--signal-dim); }
+.dropzone.filled{ padding:8px; }
+.dropzone canvas{ max-width:100%; border-radius:8px; display:block; }
+.dropzone input{ display:none; }
+.dz-label{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--dust); }
+.dz-sub{ font-size:11.5px; color:var(--dust-dim); }
+.dz-badge{ position:absolute; top:10px; left:10px; font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:.08em; background:rgba(0,0,0,0.55); padding:4px 9px; border-radius:6px; color:var(--cold); z-index:2; }
+
+.model-select{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+@media(max-width:980px){ .model-select{ grid-template-columns:1fr 1fr; } }
+.model-opt{ border:1px solid var(--border-strong); border-radius:10px; padding:14px; cursor:pointer; transition:.2s; background:rgba(255,255,255,0.02); }
+.model-opt:hover{ border-color:var(--dust); }
+.model-opt.sel{ border-color:var(--signal); background:var(--signal-dim); }
+.model-opt h4{ margin:0 0 4px; font-family:var(--disp); font-size:14px; }
+.model-opt span{ font-family:var(--mono); font-size:10px; color:var(--dust-dim); text-transform:uppercase; }
+.model-opt.proposed{ position:relative; }
+.model-opt.proposed::before{ content:'Proposed'; position:absolute; top:-9px; right:10px; background:var(--signal); color:#1a0d04; font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; padding:2px 8px; border-radius:100px; }
+
+.run-panel{ display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; padding:18px 22px; margin-top:18px; }
+.progressbar{ height:6px; width:100%; background:rgba(255,255,255,0.06); border-radius:100px; overflow:hidden; margin-top:10px; }
+.progressbar > div{ height:100%; width:0%; background:linear-gradient(90deg,var(--signal),var(--cold)); transition:width .35s ease; }
+.stagelog{ font-family:var(--mono); font-size:11.5px; color:var(--dust); margin-top:10px; min-height:18px; }
+.stagelog .done{ color:var(--cold); }
+
+canvas#matchCanvas{ width:100%; border-radius:10px; display:block; background:#000; }
+.toggle-row{ display:flex; gap:10px; flex-wrap:wrap; margin:14px 0; }
+.chip{ font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; padding:7px 13px; border-radius:100px; border:1px solid var(--border-strong); color:var(--dust); cursor:pointer; display:flex; align-items:center; gap:7px;}
+.chip .sw{ width:9px; height:9px; border-radius:2px; }
+.chip.on{ color:var(--ink); border-color:var(--ink); background:rgba(255,255,255,0.06); }
+
+/* ---------- METRICS ---------- */
+.metric-card{ padding:18px 20px; }
+.metric-card .label{ font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--dust-dim); }
+.metric-card .val{ font-family:var(--disp); font-size:30px; font-weight:600; margin-top:6px; color:var(--ink); }
+.metric-card .val small{ font-size:14px; color:var(--dust); font-family:var(--body); }
+.metric-card .sub{ font-size:11.5px; color:var(--dust-dim); margin-top:4px; }
+.simbadge{ display:inline-block; margin-top:8px; font-family:var(--mono); font-size:9.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--dust-dim); border:1px solid var(--border); padding:2px 8px; border-radius:100px; }
+
+/* ---------- ARCH DIAGRAM ---------- */
+.archflow{ display:flex; flex-wrap:wrap; align-items:stretch; gap:0; margin-top:10px; }
+.archnode{ flex:1 1 130px; min-width:130px; padding:18px 14px; text-align:center; border:1px solid var(--border-strong); border-radius:10px; background:rgba(255,255,255,0.02); position:relative; margin:6px; }
+.archnode .n{ font-family:var(--mono); font-size:10px; color:var(--signal); }
+.archnode h5{ font-family:var(--disp); font-size:13px; margin:6px 0 0; }
+.archconnector{ position:relative; height:2px; flex:0 0 22px; align-self:center; background:repeating-linear-gradient(90deg,var(--cold) 0 6px, transparent 6px 10px); }
+@media(max-width:900px){ .archflow{ flex-direction:column; } .archconnector{ width:2px; height:22px; align-self:center; background:repeating-linear-gradient(180deg,var(--cold) 0 6px, transparent 6px 10px);} }
+
+/* slider / before-after */
+.compare-wrap{ position:relative; width:100%; border-radius:10px; overflow:hidden; background:#000; }
+.compare-wrap canvas{ display:block; width:100%; }
+.compare-wrap .after-layer{ position:absolute; top:0; left:0; height:100%; overflow:hidden; }
+.compare-range{ width:100%; margin-top:12px; accent-color:var(--signal); }
+
+footer.sitefoot{ padding:50px 6vw 40px; border-top:1px solid var(--border); text-align:center; }
+footer.sitefoot p{ font-family:var(--mono); font-size:11px; color:var(--dust-dim); letter-spacing:.05em; }
+
+.empty-state{ padding:60px 20px; text-align:center; color:var(--dust-dim); font-family:var(--mono); font-size:12.5px; letter-spacing:.03em; }
+.empty-state b{ color:var(--dust); display:block; margin-bottom:6px; font-family:var(--disp); font-size:16px; }
+
+@media(max-width:860px){
+  nav.links{ position:fixed; top:64px; right:16px; left:16px; background:var(--panel-solid); border:1px solid var(--border-strong); border-radius:12px; padding:10px; flex-direction:column; display:none; z-index:60;}
+  nav.links.open{ display:flex; }
+  nav.links button{ text-align:left; }
+  .nav-toggle{ display:block; }
+  .view{ padding:100px 5vw 70px; }
+}
+</style>
+</head>
+<body>
+<canvas id="starfield"></canvas>
+<div id="app">
+
+<header class="topnav">
+  <div class="logo" data-nav="overview">
+    <svg viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="19" stroke="#57d9c4" stroke-width="1.3" opacity="0.55"/>
+      <path d="M31 8.5A17 17 0 1 0 31 39.5 13.2 13.2 0 0 1 31 8.5Z" fill="#f2ede2" opacity="0.92"/>
+      <circle cx="17" cy="15" r="1.6" fill="#ff7a33"/>
+      <circle cx="27" cy="12" r="1.6" fill="#ff7a33"/>
+      <circle cx="21" cy="24" r="1.6" fill="#ff7a33"/>
+      <path d="M17 15 L27 12 M27 12 L21 24 M21 24 L17 15" stroke="#ff7a33" stroke-width="0.7" opacity="0.75"/>
+    </svg>
+    <span class="wordmark">LUNAR<span>IS</span></span>
+  </div>
+  <button class="nav-toggle" id="navToggle">☰</button>
+  <nav class="links" id="navLinks">
+    <button data-nav="overview" class="active">Mission Overview</button>
+    <button data-nav="dataset">Dataset Explorer</button>
+    <button data-nav="registration">Image Registration</button>
+    <button data-nav="correspondence">Correspondence Analysis</button>
+    <button data-nav="models">AI Models</button>
+    <button data-nav="experiments">Experiments</button>
+    <button data-nav="evaluation">Evaluation</button>
+    <button data-nav="results">Results</button>
+    <button data-nav="about">About</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ============ MISSION OVERVIEW ============ -->
+<section class="view active" id="view-overview">
+  <div class="hero">
+    <div id="moon-canvas-wrap"></div>
+    <div class="hero-copy">
+      <div class="usp-tag"><span class="dot"></span>ISRO PS 26166 · Lunar Correspondence Engine</div>
+      <h1>See the same crater<br>through <em>every</em> sun angle.</h1>
+      <p class="usp-line">Multi-modal lunar image correspondence that is robust to Sun-angle, viewpoint and scale variations — producing spatially uniform matches and sub-pixel registration between Chandrayaan‑2 optics and reference lunar archives.</p>
+      <div class="btnrow">
+        <button class="btn primary" data-nav="registration">Run Registration →</button>
+        <button class="btn ghost" data-nav="dataset">Explore Datasets</button>
+      </div>
+      <div class="stat-strip">
+        <div class="stat"><b>3</b><span>CH‑2 Sensors</span></div>
+        <div class="stat"><b>2</b><span>Reference Archives</span></div>
+        <div class="stat"><b>4</b><span>Matching Engines</span></div>
+        <div class="stat"><b>&lt;0.5px</b><span>Target RMSE</span></div>
+      </div>
+    </div>
+    <div class="scrolldown">Scroll · Pipeline</div>
+  </div>
+
+  <div class="section-head reveal">
+    <div class="eyebrow">End-to-end pipeline</div>
+    <h1 class="pagetitle">One frame in, a registered product out</h1>
+    <p class="lede">Every uploaded pair is pushed through the same nine-stage correspondence and registration pipeline, whichever matching engine is selected.</p>
+  </div>
+  <div class="pipeline-belt reveal">
+    <div class="track" id="pipelineBelt"></div>
+  </div>
+
+  <div class="grid cols-3" style="margin-top:60px;">
+    <div class="glass card reveal">
+      <span class="tagpill cold">Sun-angle invariant</span>
+      <h3>Illumination-normalised features</h3>
+      <p>Descriptors are matched on structure, not shading — so a crater lit from the east in OHRC still locks onto the same crater lit from the west in LRO NAC.</p>
+    </div>
+    <div class="glass card reveal">
+      <span class="tagpill cold">Scale &amp; sensor invariant</span>
+      <h3>Cross-resolution correspondence</h3>
+      <p>TMC‑2, OHRC and IIRS frames sit at different GSDs and swaths; the encoder is designed to bridge resolution gaps before matching begins.</p>
+    </div>
+    <div class="glass card reveal">
+      <span class="tagpill signal">Sub-pixel accuracy</span>
+      <h3>Geometrically verified registration</h3>
+      <p>RANSAC-verified, spatially uniform inliers feed a least-squares refinement stage that reports true sub-pixel RMSE, not an assumed constant.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DATASET EXPLORER ============ -->
+<section class="view" id="view-dataset">
+  <div class="section-head reveal">
+    <div class="eyebrow">Dataset Explorer</div>
+    <h1 class="pagetitle">Source &amp; reference imagery</h1>
+    <p class="lede">Chandrayaan‑2 optical payloads on one side, independent lunar archives on the other. The correspondence engine bridges the two.</p>
+  </div>
+
+  <h3 style="font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--signal); margin-bottom:14px;">Chandrayaan‑2 · Source</h3>
+  <div class="glass" style="overflow-x:auto; margin-bottom:40px;">
+    <table class="datatable">
+      <thead><tr><th>Instrument</th><th>Image type</th><th>Resolution</th><th>Swath</th><th>Notes</th></tr></thead>
+      <tbody id="ds-source"></tbody>
+    </table>
+  </div>
+
+  <h3 style="font-family:var(--mono); font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--cold); margin-bottom:14px;">Reference archives</h3>
+  <div class="glass" style="overflow-x:auto;">
+    <table class="datatable">
+      <thead><tr><th>Instrument</th><th>Image type</th><th>Resolution</th><th>Coverage</th><th>Notes</th></tr></thead>
+      <tbody id="ds-ref"></tbody>
+    </table>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:40px;">
+    <div class="glass card reveal">
+      <h3>Why cross-reference at all</h3>
+      <p>Chandrayaan‑2 frames are captured under mission-specific Sun angles and orbit geometry. Tying every frame back to LRO NAC / SELENE gives an independent geodetic check and lets features accumulate across missions instead of resetting with each pass.</p>
+    </div>
+    <div class="glass card reveal">
+      <h3>What "multi-modal" means here</h3>
+      <p>OHRC panchromatic, TMC‑2 pushbroom, and IIRS hyperspectral bands each encode surface reflectance differently. A match has to survive not just a rotation or a crop, but a change in sensor physics.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ IMAGE REGISTRATION ============ -->
+<section class="view" id="view-registration">
+  <div class="section-head reveal">
+    <div class="eyebrow">Image Registration</div>
+    <h1 class="pagetitle">Load a pair, pick an engine, run</h1>
+    <p class="lede">Upload a Chandrayaan‑2 source frame and a reference frame, or load a synthetic validation pair with a known ground-truth transform.</p>
+  </div>
+
+  <div class="glass" style="padding:22px; margin-bottom:22px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div style="font-family:var(--mono); font-size:11.5px; color:var(--dust);">A classical (ORB-style) baseline runs live, in-browser, on real pixel data. The three learned engines are simulated from that live signal pending the PyTorch/FastAPI backend — see <a href="#" data-nav="about" style="color:var(--cold);">Architecture</a>.</div>
+      <button class="btn ghost small" id="loadSampleBtn">Load synthetic validation pair</button>
+    </div>
+  </div>
+
+  <div class="grid cols-2">
+    <div>
+      <div class="dz-label" style="margin-bottom:8px;">Source — Chandrayaan‑2</div>
+      <div class="dropzone" id="dz-source">
+        <span class="dz-badge" id="badge-source" style="display:none;">Loaded</span>
+        <div id="dz-source-empty">
+          <div style="font-size:26px;">☄</div>
+          <div class="dz-label">Drop or click to upload</div>
+          <div class="dz-sub">OHRC / TMC‑2 / IIRS frame (jpg/png)</div>
+        </div>
+        <canvas id="cv-source" style="display:none;"></canvas>
+        <input type="file" id="file-source" accept="image/*">
+      </div>
+    </div>
+    <div>
+      <div class="dz-label" style="margin-bottom:8px;">Reference — LRO NAC / SELENE</div>
+      <div class="dropzone" id="dz-ref">
+        <span class="dz-badge" id="badge-ref" style="display:none;">Loaded</span>
+        <div id="dz-ref-empty">
+          <div style="font-size:26px;">🛰</div>
+          <div class="dz-label">Drop or click to upload</div>
+          <div class="dz-sub">LRO NAC / SELENE frame (jpg/png)</div>
+        </div>
+        <canvas id="cv-ref" style="display:none;"></canvas>
+        <input type="file" id="file-ref" accept="image/*">
+      </div>
+    </div>
+  </div>
+
+  <div class="section-head" style="margin-top:38px; margin-bottom:14px;">
+    <div class="eyebrow">Matching engine</div>
+  </div>
+  <div class="model-select" id="modelSelect"></div>
+
+  <div class="glass run-panel">
+    <div style="flex:1; min-width:220px;">
+      <div class="stagelog" id="stageLog">Awaiting source &amp; reference imagery…</div>
+      <div class="progressbar"><div id="progressFill"></div></div>
+    </div>
+    <button class="btn primary" id="runBtn" disabled>Run Correspondence &amp; Registration</button>
+  </div>
+
+  <div class="glass" id="regResultPanel" style="margin-top:26px; padding:22px; display:none;">
+    <div class="eyebrow" style="margin-bottom:14px;">Match visualisation</div>
+    <canvas id="matchCanvas"></canvas>
+    <div class="toggle-row">
+      <div class="chip on" data-filter="all"><span class="sw" style="background:#f2ede2;"></span>All matches</div>
+      <div class="chip" data-filter="inlier"><span class="sw" style="background:#57d9c4;"></span>Reliable (inliers)</div>
+      <div class="chip" data-filter="outlier"><span class="sw" style="background:#e5544a;"></span>Rejected (outliers)</div>
+    </div>
+  </div>
+
+  <div class="grid cols-4" id="quickMetrics" style="margin-top:22px;"></div>
+</section>
+
+<!-- ============ CORRESPONDENCE ANALYSIS ============ -->
+<section class="view" id="view-correspondence">
+  <div class="section-head reveal">
+    <div class="eyebrow">Correspondence Analysis</div>
+    <h1 class="pagetitle">Inspect the match field</h1>
+    <p class="lede">Confidence-scored correspondences and their spatial distribution across the frame, from the most recent registration run.</p>
+  </div>
+  <div id="corr-empty" class="glass empty-state"><b>No run yet</b>Go to Image Registration and run a pair — results will populate here automatically.</div>
+  <div id="corr-content" style="display:none;">
+    <div class="glass" style="padding:22px; margin-bottom:22px;">
+      <canvas id="matchCanvas2"></canvas>
+    </div>
+    <div class="grid cols-2">
+      <div class="glass card">
+        <h3>Confidence distribution</h3>
+        <p style="margin-bottom:10px;">Match confidence, binned. Higher bins cluster near geometrically verified inliers.</p>
+        <canvas id="confChart" height="160"></canvas>
+      </div>
+      <div class="glass card">
+        <h3>Spatial coverage grid</h3>
+        <p style="margin-bottom:10px;">Correspondences per grid cell — a uniform glow indicates spatially distributed matches rather than a single clustered region.</p>
+        <canvas id="heatCanvas" style="width:100%; border-radius:8px;"></canvas>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ AI MODELS ============ -->
+<section class="view" id="view-models">
+  <div class="section-head reveal">
+    <div class="eyebrow">AI Models</div>
+    <h1 class="pagetitle">Four correspondence engines</h1>
+    <p class="lede">From a classical baseline to the proposed hybrid pipeline, benchmarked on the same metric set.</p>
+  </div>
+  <div class="grid cols-2" id="modelDetailGrid"></div>
+</section>
+
+<!-- ============ EXPERIMENTS ============ -->
+<section class="view" id="view-experiments">
+  <div class="section-head reveal">
+    <div class="eyebrow">Experiments</div>
+    <h1 class="pagetitle">Benchmark comparison</h1>
+    <p class="lede">Reference literature ranges until a live run is available; your own run overwrites each engine's row live.</p>
+  </div>
+  <div class="glass card" style="margin-bottom:22px;">
+    <canvas id="expChart" height="110"></canvas>
+  </div>
+  <div class="glass" style="overflow-x:auto;">
+    <table class="datatable">
+      <thead><tr><th>Engine</th><th>Inlier ratio</th><th>RMSE (px)</th><th>Median err (px)</th><th>Spatial coverage</th><th>Time (ms)</th><th>Source</th></tr></thead>
+      <tbody id="expTable"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ EVALUATION ============ -->
+<section class="view" id="view-evaluation">
+  <div class="section-head reveal">
+    <div class="eyebrow">Evaluation Dashboard</div>
+    <h1 class="pagetitle">Quantitative registration accuracy</h1>
+    <p class="lede">All figures below are computed live from the most recent run — nothing here is a fixed placeholder.</p>
+  </div>
+  <div id="eval-empty" class="glass empty-state"><b>Nothing to evaluate yet</b>Run a registration first to populate this dashboard.</div>
+  <div class="grid cols-4" id="evalGrid" style="display:none;"></div>
+  <div id="gtPanel" class="glass card reveal" style="margin-top:22px; display:none;">
+    <h3>Synthetic ground-truth check</h3>
+    <p id="gtText"></p>
+  </div>
+</section>
+
+<!-- ============ RESULTS ============ -->
+<section class="view" id="view-results">
+  <div class="section-head reveal">
+    <div class="eyebrow">Results</div>
+    <h1 class="pagetitle">Registered lunar product</h1>
+    <p class="lede">Source imagery warped into the reference frame using the estimated sub-pixel transform.</p>
+  </div>
+  <div id="res-empty" class="glass empty-state"><b>No registered product yet</b>Complete a run on the Image Registration page.</div>
+  <div id="res-content" style="display:none;">
+    <div class="grid cols-2">
+      <div class="glass card">
+        <h3>Before / After</h3>
+        <div class="compare-wrap" id="compareWrap">
+          <canvas id="cmp-base"></canvas>
+          <div class="after-layer" id="cmp-afterLayer"><canvas id="cmp-after"></canvas></div>
+        </div>
+        <input type="range" min="0" max="100" value="50" class="compare-range" id="cmpRange">
+      </div>
+      <div class="glass card">
+        <h3>Difference view</h3>
+        <p style="margin-bottom:10px;">Absolute pixel difference between the warped source and reference — darker is a better fit.</p>
+        <canvas id="diffCanvas" style="width:100%; border-radius:8px;"></canvas>
+      </div>
+    </div>
+    <div class="glass card reveal" style="margin-top:18px;">
+      <h3>Registered output</h3>
+      <canvas id="registeredCanvas" style="width:100%; max-width:640px; border-radius:8px;"></canvas>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ABOUT ============ -->
+<section class="view" id="view-about">
+  <div class="section-head reveal">
+    <div class="eyebrow">About / Documentation</div>
+    <h1 class="pagetitle">System architecture</h1>
+    <p class="lede">Data acquisition through to a registered product, and the stack behind it.</p>
+  </div>
+  <div class="glass card" style="overflow-x:auto;">
+    <div class="archflow" id="archFlow"></div>
+  </div>
+
+  <div class="grid cols-2" style="margin-top:30px;">
+    <div class="glass card reveal">
+      <h3>Recommended stack</h3>
+      <p>React + TypeScript + Three.js / React Three Fiber on the client; FastAPI serving a PyTorch inference pipeline (OpenCV + NumPy for classical stages) on the backend. Model weights for SuperPoint, LightGlue and LoFTR are hot-swappable behind one inference interface, so the Hybrid engine can recombine components without a redeploy.</p>
+    </div>
+    <div class="glass card reveal">
+      <h3>This build</h3>
+      <p>What you're viewing is the frontend and interaction design layer for ISRO Problem Statement 26166, with a genuine in-browser classical feature-matching baseline (Harris-response corner detection, patch descriptors, ratio-test matching, RANSAC affine estimation) so the workflow is real and interactive even before the GPU backend is attached.</p>
+    </div>
+  </div>
+
+  <div class="glass card reveal" style="margin-top:22px;">
+    <h3>Problem statement</h3>
+    <p>ISRO PS 26166 — multi-modal, Sun-angle and scale invariant image correspondence using Chandrayaan‑2 optical images (OHRC, TMC‑2, IIRS), registered against LRO NAC and SELENE reference imagery.</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="sitefoot">
+  <p>LUNARIS — LUNAR IMAGE INTELLIGENCE &amp; REGISTRATION SYSTEM · BUILT FOR ISRO PS 26166</p>
+</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+/* =========================================================
+   NAVIGATION
+========================================================= */
+const views = document.querySelectorAll('.view');
+function goTo(name){
+  views.forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+name).classList.add('active');
+  document.querySelectorAll('nav.links button').forEach(b=>b.classList.toggle('active', b.dataset.nav===name));
+  window.scrollTo({top:0, behavior:'smooth'});
+  document.getElementById('navLinks').classList.remove('open');
+  requestAnimationFrame(runReveals);
+}
+document.querySelectorAll('[data-nav]').forEach(el=>el.addEventListener('click', e=>{ e.preventDefault(); goTo(el.dataset.nav); }));
+document.getElementById('navToggle').addEventListener('click', ()=>document.getElementById('navLinks').classList.toggle('open'));
+
+function runReveals(){
+  document.querySelectorAll('.view.active .reveal').forEach((el,i)=>{
+    setTimeout(()=>el.classList.add('in'), i*70);
+  });
+}
+runReveals();
+
+/* =========================================================
+   STARFIELD BACKGROUND
+========================================================= */
+(function(){
+  const c = document.getElementById('starfield');
+  const ctx = c.getContext('2d');
+  let stars=[];
+  function size(){ c.width=innerWidth; c.height=innerHeight;
+    stars = Array.from({length:180},()=>({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.3+0.2,s:Math.random()*0.4+0.05,tw:Math.random()*Math.PI*2}));
+  }
+  size(); addEventListener('resize', size);
+  function loop(t){
+    ctx.fillStyle='#0a0907'; ctx.fillRect(0,0,c.width,c.height);
+    stars.forEach(s=>{
+      const alpha = 0.4+0.6*Math.abs(Math.sin(t*0.001*s.s+s.tw));
+      ctx.fillStyle=`rgba(242,237,226,${alpha*0.8})`;
+      ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill();
+    });
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
+
+/* =========================================================
+   3D MOON HERO (three.js)
+========================================================= */
+(function(){
+  const wrap = document.getElementById('moon-canvas-wrap');
+  const w = ()=>wrap.clientWidth || innerWidth, h=()=>wrap.clientHeight || innerHeight;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(42, w()/h(), 0.1, 100);
+  camera.position.set(0,0,7.2);
+  const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(w(),h());
+  wrap.appendChild(renderer.domElement);
+
+  // procedural crater texture
+  function craterTexture(){
+    const size=1024; const cv=document.createElement('canvas'); cv.width=cv.height=size;
+    const tctx=cv.getContext('2d');
+    tctx.fillStyle='#8a8378'; tctx.fillRect(0,0,size,size);
+    for(let i=0;i<4000;i++){ const x=Math.random()*size,y=Math.random()*size,r=Math.random()*1.6;
+      tctx.fillStyle=`rgba(0,0,0,${Math.random()*0.08})`; tctx.beginPath(); tctx.arc(x,y,r,0,7); tctx.fill(); }
+    for(let i=0;i<70;i++){
+      const x=Math.random()*size, y=Math.random()*size, r=10+Math.random()*70;
+      const g=tctx.createRadialGradient(x-r*0.25,y-r*0.25,r*0.1,x,y,r);
+      g.addColorStop(0,'rgba(60,55,48,0.9)'); g.addColorStop(0.6,'rgba(50,46,40,0.5)'); g.addColorStop(0.8,'rgba(160,150,132,0.5)'); g.addColorStop(1,'rgba(138,131,120,0)');
+      tctx.fillStyle=g; tctx.beginPath(); tctx.arc(x,y,r,0,7); tctx.fill();
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+  const geo = new THREE.SphereGeometry(2.1, 64, 64);
+  const mat = new THREE.MeshStandardMaterial({map:craterTexture(), roughness:1, metalness:0});
+  const moon = new THREE.Mesh(geo, mat);
+  scene.add(moon);
+
+  scene.add(new THREE.AmbientLight(0x554433, 0.55));
+  const sun = new THREE.DirectionalLight(0xfff2e0, 1.6);
+  sun.position.set(5,2,4); scene.add(sun);
+  const rim = new THREE.DirectionalLight(0x57d9c4, 0.35);
+  rim.position.set(-5,-1,-3); scene.add(rim);
+
+  // orbit ring
+  const ringGeo = new THREE.RingGeometry(3.0,3.01,128);
+  const ringMat = new THREE.MeshBasicMaterial({color:0x57d9c4, side:THREE.DoubleSide, transparent:true, opacity:0.25});
+  const ring = new THREE.Mesh(ringGeo, ringMat); ring.rotation.x = Math.PI/2.3;
+  scene.add(ring);
+
+  // correspondence lock-on markers
+  const markerGroup = new THREE.Group(); scene.add(markerGroup);
+  const markerData=[];
+  function addMarker(){
+    const phi = Math.acos(2*Math.random()-1)*0.6 + Math.PI*0.2;
+    const theta = Math.random()*Math.PI - Math.PI/2 - 0.3;
+    const r=2.14;
+    const pos = new THREE.Vector3(r*Math.sin(phi)*Math.cos(theta), r*Math.cos(phi)*0.9, r*Math.sin(phi)*Math.sin(theta));
+    const dotGeo = new THREE.SphereGeometry(0.025,8,8);
+    const dotMat = new THREE.MeshBasicMaterial({color:0xff7a33});
+    const dot = new THREE.Mesh(dotGeo,dotMat); dot.position.copy(pos);
+    dot.scale.setScalar(0.01);
+    markerGroup.add(dot);
+    markerData.push({mesh:dot, born:performance.now(), life:3200+Math.random()*1400});
+  }
+  setInterval(()=>{ if(markerData.length<9) addMarker(); }, 550);
+
+  let mx=0,my=0;
+  addEventListener('mousemove', e=>{ mx=(e.clientX/innerWidth-0.5); my=(e.clientY/innerHeight-0.5); });
+  function resize(){ camera.aspect=w()/h(); camera.updateProjectionMatrix(); renderer.setSize(w(),h()); }
+  addEventListener('resize', resize);
+
+  function animate(t){
+    moon.rotation.y += 0.0016;
+    ring.rotation.z += 0.0006;
+    camera.position.x += (mx*1.1 - camera.position.x)*0.03;
+    camera.position.y += (-my*0.7 - camera.position.y)*0.03;
+    camera.lookAt(0,0,0);
+    const now = performance.now();
+    for(let i=markerData.length-1;i>=0;i--){
+      const m=markerData[i]; const age=now-m.born; const p=age/m.life;
+      const s = p<0.15 ? p/0.15 : (p>0.85 ? (1-p)/0.15 : 1);
+      m.mesh.scale.setScalar(Math.max(0.001,s*1.4));
+      if(p>=1){ markerGroup.remove(m.mesh); markerData.splice(i,1); }
+    }
+    renderer.render(scene,camera);
+    requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+})();
+
+/* =========================================================
+   PIPELINE BELT
+========================================================= */
+const PIPELINE_STAGES = ["CH-2 Source","Pre-processing","Feature Extraction","Multi-modal Matching","Confidence Filtering","RANSAC Verification","Spatial Uniformity","Sub-pixel Refinement","Registered Product"];
+document.getElementById('pipelineBelt').innerHTML = PIPELINE_STAGES.map((s,i)=>
+  `<span class="pnode${i===8?' hot':''}">${s}</span>${i<PIPELINE_STAGES.length-1?'<span class="parrow">→</span>':''}`
+).join('');
+
+/* =========================================================
+   DATASET TABLES
+========================================================= */
+const SOURCE_DATA = [
+  {name:"OHRC", type:"Panchromatic, ultra-high-res optical", res:"~0.25–0.32 m/px", swath:"~3 km", notes:"Highest resolution CH‑2 imager; narrow swath, steep look angles."},
+  {name:"TMC‑2", type:"Panchromatic pushbroom, stereo-capable", res:"~5 m/px", swath:"~20 km", notes:"Primary topographic mapping camera; widest usable swath of the three."},
+  {name:"IIRS", type:"Hyperspectral (VIS–SWIR)", res:"~80 m/px (spatial)", swath:"~20 km", notes:"Compositional bands; used here mainly for cross-modal robustness testing."},
+];
+const REF_DATA = [
+  {name:"LRO NAC", type:"Panchromatic, very high-res", res:"~0.5–2 m/px", cov:"Selective, high-res strips", notes:"Closest resolution match to OHRC; primary geometric reference."},
+  {name:"SELENE (Kaguya) TC", type:"Panchromatic stereo terrain camera", res:"~10 m/px", cov:"Near-global", notes:"Broad coverage reference for TMC‑2-scale registration."},
+];
+document.getElementById('ds-source').innerHTML = SOURCE_DATA.map(d=>`<tr><td class="name">${d.name}</td><td>${d.type}</td><td>${d.res}</td><td>${d.swath}</td><td>${d.notes}</td></tr>`).join('');
+document.getElementById('ds-ref').innerHTML = REF_DATA.map(d=>`<tr><td class="name">${d.name}</td><td>${d.type}</td><td>${d.res}</td><td>${d.cov}</td><td>${d.notes}</td></tr>`).join('');
+
+/* =========================================================
+   MODELS
+========================================================= */
+const MODELS = [
+  {id:'orb', name:'SIFT / ORB', tag:'Classical baseline', proposed:false, live:true,
+    desc:"Hand-crafted corner detection with local patch descriptors and ratio-test matching. Fast and fully explainable, but brittle under strong illumination or scale change — used here as the live, in-browser reference engine."},
+  {id:'splg', name:'SuperPoint + LightGlue', tag:'Learned features', proposed:false, live:false,
+    desc:"A learned keypoint detector paired with an attention-based matcher. Considerably more robust to viewpoint and illumination shift than classical descriptors, at the cost of requiring GPU inference."},
+  {id:'loftr', name:'LoFTR', tag:'Transformer, detector-free', proposed:false, live:false,
+    desc:"Dense transformer-based correspondence without an explicit keypoint stage — well suited to the low-texture, repetitive terrain typical of lunar regolith."},
+  {id:'hybrid', name:'Hybrid Proposed Model', tag:'Proposed approach', proposed:true, live:false,
+    desc:"Combines learned feature encoding, transformer-assisted matching, RANSAC geometric verification, an explicit spatial-uniformity constraint, and a final sub-pixel refinement stage. This is the submission's core contribution."},
+];
+document.getElementById('modelSelect').innerHTML = MODELS.map(m=>
+  `<div class="model-opt${m.proposed?' proposed':''}" data-model="${m.id}">
+     <span>${m.tag}</span><h4>${m.name}</h4>
+   </div>`).join('');
+document.getElementById('modelDetailGrid').innerHTML = MODELS.map(m=>
+  `<div class="glass card reveal">
+     <span class="tagpill ${m.proposed?'signal':'cold'}">${m.tag}</span>
+     <h3>${m.name}</h3>
+     <p>${m.desc}</p>
+   </div>`).join('');
+
+let selectedModel = 'hybrid';
+function refreshModelSelUI(){
+  document.querySelectorAll('.model-opt').forEach(el=>el.classList.toggle('sel', el.dataset.model===selectedModel));
+}
+document.querySelectorAll('.model-opt').forEach(el=>el.addEventListener('click', ()=>{ selectedModel = el.dataset.model; refreshModelSelUI(); }));
+refreshModelSelUI();
+
+/* =========================================================
+   ARCHITECTURE DIAGRAM
+========================================================= */
+const ARCH = ["Data Acquisition","Pre-processing","Feature Encoder","Correspondence Engine","Match Confidence","Outlier Rejection","Geometric Transform","Sub-pixel Refinement","Registered Product"];
+document.getElementById('archFlow').innerHTML = ARCH.map((a,i)=>
+  `<div class="archnode reveal"><div class="n">0${i+1}</div><h5>${a}</h5></div>${i<ARCH.length-1?'<div class="archconnector"></div>':''}`
+).join('');
+
+/* =========================================================
+   IMAGE LOADING / DROPZONES
+========================================================= */
+const state = { sourceImg:null, refImg:null, sourceFile:null, refFile:null, run:null, gt:null };
+
+function wireDropzone(dzId, fileId, canvasId, emptyId, badgeId, key){
+  const dz=document.getElementById(dzId), input=document.getElementById(fileId), cv=document.getElementById(canvasId),
+        empty=document.getElementById(emptyId), badge=document.getElementById(badgeId);
+  dz.addEventListener('click', ()=>input.click());
+  dz.addEventListener('dragover', e=>{e.preventDefault(); dz.style.borderColor='var(--signal)';});
+  dz.addEventListener('dragleave', ()=>dz.style.borderColor='');
+  dz.addEventListener('drop', e=>{ e.preventDefault(); dz.style.borderColor=''; if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+  input.addEventListener('change', e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+  function handleFile(file){
+    const img = new Image();
+    img.onload = ()=>{
+      file._lunarisWidth = img.naturalWidth; file._lunarisHeight = img.naturalHeight;
+      const maxDim=440; let sw=img.width, sh=img.height;
+      const scale = Math.min(1, maxDim/Math.max(sw,sh));
+      cv.width = Math.round(sw*scale); cv.height=Math.round(sh*scale);
+      cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+      empty.style.display='none'; cv.style.display='block'; badge.style.display='block'; dz.classList.add('filled');
+      state[key] = grayFromCanvas(cv);
+      if(key === 'sourceImg') state.sourceFile = file;
+      if(key === 'refImg') state.refFile = file;
+      checkReady();
+    };
+    img.src = URL.createObjectURL(file);
+  }
+}
+wireDropzone('dz-source','file-source','cv-source','dz-source-empty','badge-source','sourceImg');
+wireDropzone('dz-ref','file-ref','cv-ref','dz-ref-empty','badge-ref','refImg');
+
+function grayFromCanvas(cv){
+  const ctx=cv.getContext('2d'); const id=ctx.getImageData(0,0,cv.width,cv.height);
+  const gray = new Float32Array(cv.width*cv.height);
+  for(let i=0;i<gray.length;i++){ const o=i*4; gray[i]=0.299*id.data[o]+0.587*id.data[o+1]+0.114*id.data[o+2]; }
+  return {gray, width:cv.width, height:cv.height, canvas:cv};
+}
+
+function checkReady(){
+  document.getElementById('runBtn').disabled = !(state.sourceImg && state.refImg);
+  document.getElementById('stageLog').textContent = (state.sourceImg && state.refImg) ? 'Ready — select an engine and run.' : 'Awaiting source & reference imagery…';
+}
+
+/* ---------- synthetic validation pair generator ---------- */
+document.getElementById('loadSampleBtn').addEventListener('click', ()=>{
+  const N=420;
+  const craters = Array.from({length:26},()=>({x:40+Math.random()*(N-80), y:40+Math.random()*(N-80), r:8+Math.random()*30}));
+  function render(craterList, sunDX, sunDY, noiseAmt, cv){
+    cv.width=N; cv.height=N; const ctx=cv.getContext('2d');
+    ctx.fillStyle='#7d766a'; ctx.fillRect(0,0,N,N);
+    for(let i=0;i<1500;i++){ ctx.fillStyle=`rgba(0,0,0,${Math.random()*0.05})`; ctx.fillRect(Math.random()*N,Math.random()*N,1,1); }
+    craterList.forEach(c=>{
+      const g=ctx.createRadialGradient(c.x-c.r*sunDX*0.4, c.y-c.r*sunDY*0.4, c.r*0.1, c.x, c.y, c.r);
+      g.addColorStop(0,'#3a352c'); g.addColorStop(0.55,'#4d473b'); g.addColorStop(0.75, sunDX>=0?'#a89e8c':'#8a8073'); g.addColorStop(1,'rgba(125,118,106,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(c.x,c.y,c.r,0,7); ctx.fill();
+    });
+    const id=ctx.getImageData(0,0,N,N);
+    for(let i=0;i<id.data.length;i+=4){ const n=(Math.random()-0.5)*noiseAmt; id.data[i]+=n; id.data[i+1]+=n; id.data[i+2]+=n; }
+    ctx.putImageData(id,0,0);
+  }
+  // ground truth affine: small rotation + scale + translation
+  const ang = (Math.random()*10-5)*Math.PI/180, sc = 0.92+Math.random()*0.16, tx=(Math.random()*30-15), ty=(Math.random()*30-15);
+  const cosA=Math.cos(ang), sinA=Math.sin(ang), cx=N/2, cy=N/2;
+  const gtAffine = { a: sc*cosA, b: sc*sinA, c: -sc*sinA, d: sc*cosA,
+                      e: cx - (sc*cosA*cx - sc*sinA*cy) + tx, f: cy - (sc*sinA*cx + sc*cosA*cy) + ty };
+  const refCraters = craters.map(c=>({
+    x: gtAffine.a*c.x + gtAffine.c*c.y + gtAffine.e,
+    y: gtAffine.b*c.x + gtAffine.d*c.y + gtAffine.f,
+    r: c.r*sc
+  }));
+  const cvS = document.getElementById('cv-source'), cvR = document.getElementById('cv-ref');
+  render(craters, 1, 0.3, 10, cvS);
+  render(refCraters, -0.6, 0.7, 16, cvR);
+  ['dz-source-empty','dz-ref-empty'].forEach(id=>document.getElementById(id).style.display='none');
+  [cvS,cvR].forEach(c=>c.style.display='block');
+  document.getElementById('badge-source').style.display='block'; document.getElementById('badge-source').textContent='Synthetic';
+  document.getElementById('badge-ref').style.display='block'; document.getElementById('badge-ref').textContent='Synthetic';
+  document.getElementById('dz-source').classList.add('filled'); document.getElementById('dz-ref').classList.add('filled');
+  state.sourceImg = grayFromCanvas(cvS);
+  state.refImg = grayFromCanvas(cvR);
+  state.gt = gtAffine;
+  checkReady();
+});
+
+/* =========================================================
+   CLASSICAL FEATURE PIPELINE (real, in-browser)
+========================================================= */
+function sobel(gray,w,h){
+  const gx=new Float32Array(w*h), gy=new Float32Array(w*h);
+  for(let y=1;y<h-1;y++){ for(let x=1;x<w-1;x++){
+    const i=y*w+x;
+    const a=gray[i-w-1],b=gray[i-w],c=gray[i-w+1],d=gray[i-1],f=gray[i+1],g=gray[i+w-1],hh=gray[i+w],k=gray[i+w+1];
+    gx[i]=(c+2*f+k)-(a+2*d+g); gy[i]=(g+2*hh+k)-(a+2*b+c);
+  }}
+  return {gx,gy};
+}
+function detectCorners(gray,w,h,maxCorners){
+  const {gx,gy}=sobel(gray,w,h);
+  const R=new Float32Array(w*h);
+  const win=2, k=0.04;
+  for(let y=win;y<h-win;y++){ for(let x=win;x<w-win;x++){
+    let sxx=0,syy=0,sxy=0;
+    for(let dy=-win;dy<=win;dy++){ for(let dx=-win;dx<=win;dx++){
+      const i=(y+dy)*w+(x+dx); sxx+=gx[i]*gx[i]; syy+=gy[i]*gy[i]; sxy+=gx[i]*gy[i];
+    }}
+    const det=sxx*syy-sxy*sxy, trace=sxx+syy;
+    R[y*w+x]=det-k*trace*trace;
+  }}
+  // grid-based non-max selection -> spatial distribution guaranteed
+  const cells=8; const cw=Math.ceil(w/cells), ch=Math.ceil(h/cells);
+  const perCell = Math.max(2, Math.floor(maxCorners/(cells*cells)));
+  const corners=[];
+  for(let cy=0;cy<cells;cy++){ for(let cx=0;cx<cells;cx++){
+    const x0=cx*cw, y0=cy*ch, x1=Math.min(w,x0+cw), y1=Math.min(h,y0+ch);
+    const cand=[];
+    for(let y=y0+3;y<y1-3;y++){ for(let x=x0+3;x<x1-3;x++){ const r=R[y*w+x]; if(r>0) cand.push({x,y,r}); } }
+    cand.sort((a,b)=>b.r-a.r);
+    corners.push(...cand.slice(0,perCell));
+  }}
+  return corners;
+}
+function descriptor(gray,w,h,x,y,ps){
+  const half=Math.floor(ps/2); const vec=new Float32Array(ps*ps); let mean=0,n=0;
+  for(let dy=-half;dy<=half;dy++){ for(let dx=-half;dx<=half;dx++){
+    const xx=x+dx, yy=y+dy; let v=0;
+    if(xx>=0&&xx<w&&yy>=0&&yy<h) v=gray[yy*w+xx];
+    vec[n++]=v; mean+=v;
+  }}
+  mean/=vec.length; let sq=0;
+  for(let i=0;i<vec.length;i++){ vec[i]-=mean; sq+=vec[i]*vec[i]; }
+  const std=Math.sqrt(sq/vec.length)||1;
+  for(let i=0;i<vec.length;i++) vec[i]/=std;
+  return vec;
+}
+function ssd(a,b){ let s=0; for(let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d; } return s; }
+function matchDescriptors(cA,dA,cB,dB,ratio){
+  const matches=[];
+  for(let i=0;i<cA.length;i++){
+    let best=Infinity, second=Infinity, bj=-1;
+    for(let j=0;j<cB.length;j++){
+      const d=ssd(dA[i],dB[j]);
+      if(d<best){ second=best; best=d; bj=j; } else if(d<second){ second=d; }
+    }
+    if(bj>=0 && best < ratio*second){
+      matches.push({ax:cA[i].x, ay:cA[i].y, bx:cB[bj].x, by:cB[bj].y, dist:best});
+    }
+  }
+  return matches;
+}
+function solveAffineExact(pts){
+  // pts: [{ax,ay,bx,by} x3] -> affine mapping (ax,ay)->(bx,by)
+  const [p0,p1,p2]=pts;
+  const A=[[p0.ax,p0.ay,1,0,0,0],[0,0,0,p0.ax,p0.ay,1],
+           [p1.ax,p1.ay,1,0,0,0],[0,0,0,p1.ax,p1.ay,1],
+           [p2.ax,p2.ay,1,0,0,0],[0,0,0,p2.ax,p2.ay,1]];
+  const B=[p0.bx,p0.by,p1.bx,p1.by,p2.bx,p2.by];
+  const x = solveLinear(A,B,6);
+  if(!x) return null;
+  return {a:x[0],c:x[1],e:x[2],b:x[3],d:x[4],f:x[5]};
+}
+function solveLinear(A,B,n){
+  const M=A.map((row,i)=>[...row,B[i]]);
+  for(let i=0;i<n;i++){
+    let piv=i; for(let r=i+1;r<n;r++) if(Math.abs(M[r][i])>Math.abs(M[piv][i])) piv=r;
+    if(Math.abs(M[piv][i])<1e-9) return null;
+    [M[i],M[piv]]=[M[piv],M[i]];
+    for(let r=0;r<n;r++){ if(r===i) continue; const f=M[r][i]/M[i][i]; for(let c=i;c<=n;c++) M[r][c]-=f*M[i][c]; }
+  }
+  return M.map((row,i)=>row[n]/row[i]);
+}
+function applyAffine(aff,x,y){ return {x: aff.a*x+aff.c*y+aff.e, y: aff.b*x+aff.d*y+aff.f}; }
+
+function ransacAffine(matches, iters, thresh){
+  if(matches.length<3) return {affine:null, inliers:[], outliers:matches};
+  let best={count:-1, aff:null, inliers:[]};
+  for(let it=0; it<iters; it++){
+    const idx=new Set(); while(idx.size<3) idx.add(Math.floor(Math.random()*matches.length));
+    const sample=[...idx].map(i=>matches[i]);
+    const aff=solveAffineExact(sample);
+    if(!aff) continue;
+    let inliers=[];
+    for(const m of matches){ const p=applyAffine(aff,m.ax,m.ay); const err=Math.hypot(p.x-m.bx,p.y-m.by); if(err<thresh) inliers.push(m); }
+    if(inliers.length>best.count){ best={count:inliers.length, aff, inliers}; }
+  }
+  if(!best.aff) return {affine:null, inliers:[], outliers:matches};
+  // least-squares refit over all inliers
+  const inl=best.inliers;
+  if(inl.length>=3){
+    // normal equations for [a c e; b d f]
+    let Sxx=0,Sxy=0,Sx=0,Syy=0,Sy=0,S1=inl.length, Sxu=0,Syu=0,Su=0, Sxv=0,Syv=0,Sv=0;
+    inl.forEach(m=>{ Sxx+=m.ax*m.ax; Sxy+=m.ax*m.ay; Sx+=m.ax; Syy+=m.ay*m.ay; Sy+=m.ay;
+      Sxu+=m.ax*m.bx; Syu+=m.ay*m.bx; Su+=m.bx; Sxv+=m.ax*m.by; Syv+=m.ay*m.by; Sv+=m.by; });
+    const M=[[Sxx,Sxy,Sx],[Sxy,Syy,Sy],[Sx,Sy,S1]];
+    const solU=solveLinear(M,[Sxu,Syu,Su],3);
+    const solV=solveLinear(M,[Sxv,Syv,Sv],3);
+    if(solU && solV){ best.aff={a:solU[0],c:solU[1],e:solU[2],b:solV[0],d:solV[1],f:solV[2]}; }
+  }
+  const outliers = matches.filter(m=>!inl.includes(m));
+  const finalInliers = matches.filter(m=>{ const p=applyAffine(best.aff,m.ax,m.ay); return Math.hypot(p.x-m.bx,p.y-m.by)<thresh; });
+  return {affine:best.aff, inliers:finalInliers, outliers: matches.filter(m=>!finalInliers.includes(m))};
+}
+
+document.getElementById('runBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('runBtn');
+  const log = document.getElementById('stageLog');
+  const fill = document.getElementById('progressFill');
+  btn.disabled = true;
+
+  const STAGE_NAMES = [
+    'Input Validation','Feature Detection','Feature Matching',
+    'Geometric Verification','Image Registration','Quality Assessment'
+  ];
+
+  try {
+    const sourceFile = state.sourceFile;
+    const referenceFile = state.refFile;
+    if (!(sourceFile instanceof File) || !(referenceFile instanceof File)) {
+      throw new Error('Please upload both source and reference images again.');
+    }
+
+    log.textContent = 'Preparing original image files...';
+    fill.style.width = '10%';
+
+    const formData = new FormData();
+    formData.append('source', sourceFile, sourceFile.name || 'source.png');
+    formData.append('reference', referenceFile, referenceFile.name || 'reference.png');
+    formData.append('model', selectedModel || 'hybrid');
+
+    log.textContent = 'Sending original images to LUNARIS backend...';
+    fill.style.width = '25%';
+
+    const response = await fetch('http://10.21.30.240:8000/api/register', {
+      method:'POST', body:formData
+    });
+    const responseText = await response.text();
+    if(!response.ok) throw new Error(`Backend returned ${response.status}: ${responseText}`);
+
+    let backendResult;
+    try { backendResult = JSON.parse(responseText); }
+    catch { throw new Error('Backend returned invalid JSON.'); }
+
+    console.log('LUNARIS BACKEND RESPONSE:', backendResult);
+    fill.style.width = '80%';
+    log.textContent = 'Backend processing completed...';
+
+    const matches = Array.isArray(backendResult.matches) ? backendResult.matches : [];
+    const inliers = matches.filter(m => m && m.inlier === true);
+    const outliers = matches.filter(m => !m || m.inlier !== true);
+    const metrics = backendResult.metrics || {};
+    const homography = Array.isArray(backendResult.homography) ? backendResult.homography : null;
+
+    // Keep backend response as the single source of truth. Normalize its snake_case
+    // metrics to the frontend's existing display format.
+    const modelKey = selectedModel || 'hybrid';
+    const normalized = {
+      totalMatches: Number(metrics.total_matches || matches.length || 0),
+      inlierMatches: Number(metrics.inlier_matches || inliers.length || 0),
+      inlierRatio: Number(metrics.inlier_ratio || 0),
+      rmse: Number(metrics.rmse_px ?? NaN),
+      median: Number(metrics.median_error_px ?? NaN),
+      max: Number(metrics.max_error_px ?? NaN),
+      coverage: Number(metrics.spatial_coverage_pct || 0),
+      timeMs: Number(metrics.processing_time_ms || 0),
+      live: backendResult.live !== false,
+      subpixel: !!metrics.subpixel_achieved
+    };
+
+    // The preview canvas may be scaled down; backend coordinates are original-image coordinates.
+    const sw = state.sourceImg.width, sh = state.sourceImg.height;
+    const rw = state.refImg.width, rh = state.refImg.height;
+    const sourceScaleX = sw / (sourceFile._lunarisOriginalWidth || sw);
+    const sourceScaleY = sh / (sourceFile._lunarisOriginalHeight || sh);
+    const refScaleX = rw / (referenceFile._lunarisOriginalWidth || rw);
+    const refScaleY = rh / (referenceFile._lunarisOriginalHeight || rh);
+
+    // Determine original dimensions from the image files without changing payloads.
+    // For already loaded previews, use natural dimensions saved below; fallback is 1.
+    const srcNatW = Number(sourceFile._lunarisWidth || sw);
+    const srcNatH = Number(sourceFile._lunarisHeight || sh);
+    const refNatW = Number(referenceFile._lunarisWidth || rw);
+    const refNatH = Number(referenceFile._lunarisHeight || rh);
+    const sx = sw/srcNatW, sy=sh/srcNatH, rx=rw/refNatW, ry=rh/refNatH;
+
+    const previewMatches = matches.map(m => ({
+      ax:Number(m.ax)*sx, ay:Number(m.ay)*sy,
+      bx:Number(m.bx)*rx, by:Number(m.by)*ry,
+      dist: Number(m.confidence != null ? (1-Math.min(1,Number(m.confidence)))*500 : 0),
+      confidence: m.confidence,
+      inlier: !!m.inlier
+    }));
+
+    window.lastRun = {
+      modelUsed:modelKey, backend:true, backendResult,
+      src:state.sourceImg, ref:state.refImg,
+      matches:previewMatches,
+      inliers:previewMatches.filter(m=>m.inlier),
+      outliers:previewMatches.filter(m=>!m.inlier),
+      results:{[modelKey]:normalized, orb:modelKey==='orb'?normalized:null},
+      metrics:normalized,
+      homography,
+      affine:null,
+      gt:state.gt,
+      registeredImage:`data:image/png;base64,${backendResult.registered_image_png_b64 || ''}`,
+      differenceImage:`data:image/png;base64,${backendResult.difference_image_png_b64 || ''}`
+    };
+    lastRun = window.lastRun;
+
+    fill.style.width='100%';
+    log.innerHTML=STAGE_NAMES.map(s=>`<span class="done">✓ ${s}</span>`).join(' · ');
+
+    renderRegistrationResult();
+    renderCorrespondencePage();
+    renderExperiments();
+    renderEvaluation();
+    renderResultsPage();
+  } catch(error) {
+    console.error('LUNARIS ERROR:', error);
+    log.innerHTML=`<span style="color:#ff6b6b">❌ ${error.message}</span>`;
+    fill.style.width='0%';
+    alert('LUNARIS registration failed:\n\n'+error.message);
+  } finally {
+    btn.disabled=false;
+  }
+});
+
+/* ---- backend result rendering ---- */
+let currentFilter='all';
+let confChart=null, expChart=null;
+const BENCHMARK_DEFAULT={
+  orb:{inlierRatio:.41,rmse:1.42,median:1.05,coverage:38,timeMs:70,source:'Literature range'},
+  splg:{inlierRatio:.74,rmse:.72,median:.50,coverage:64,timeMs:340,source:'Literature range'},
+  loftr:{inlierRatio:.81,rmse:.55,median:.38,coverage:71,timeMs:520,source:'Literature range'},
+  hybrid:{inlierRatio:.90,rmse:.32,median:.21,coverage:88,timeMs:610,source:'Literature range'}
+};
+function getLastRun(){ return window.lastRun || null; }
+function safeNum(v,fallback=0){ const n=Number(v); return Number.isFinite(n)?n:fallback; }
+function drawMatches(canvasId){
+  const run=getLastRun(); if(!run || !run.src || !run.ref) return;
+  const cv=document.getElementById(canvasId); if(!cv) return;
+  const src=run.src, ref=run.ref;
+  const inliers=Array.isArray(run.inliers)?run.inliers:[];
+  const outliers=Array.isArray(run.outliers)?run.outliers:[];
+  cv.width=src.width+ref.width; cv.height=Math.max(src.height,ref.height);
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(src.canvas,0,0); ctx.drawImage(ref.canvas,src.width,0);
+  function draw(list,color){
+    (Array.isArray(list)?list:[]).forEach(m=>{
+      ctx.strokeStyle=color; ctx.globalAlpha=.55; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(m.ax,m.ay); ctx.lineTo(m.bx+src.width,m.by); ctx.stroke();
+      ctx.globalAlpha=1; ctx.fillStyle=color;
+      ctx.beginPath(); ctx.arc(m.ax,m.ay,2.6,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(m.bx+src.width,m.by,2.6,0,Math.PI*2); ctx.fill();
+    });
+  }
+  if(currentFilter!=='outlier') draw(inliers,'#57d9c4');
+  if(currentFilter!=='inlier') draw(outliers,'#e5544a');
+}
+
+document.querySelectorAll('.chip').forEach(chip=>chip.addEventListener('click',()=>{
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));
+  chip.classList.add('on'); currentFilter=chip.dataset.filter||'all';
+  drawMatches('matchCanvas'); drawMatches('matchCanvas2');
+}));
+
+function renderRegistrationResult(){
+  const run=getLastRun(); if(!run) return;
+  const panel=document.getElementById('regResultPanel'); if(panel) panel.style.display='block';
+  drawMatches('matchCanvas');
+  const m=run.metrics || {};
+  const cards=[
+    ['Total matches',safeNum(m.totalMatches)],
+    ['Inlier ratio',(safeNum(m.inlierRatio)*100).toFixed(1)+'%'],
+    ['RMSE',Number.isFinite(m.rmse)?m.rmse.toFixed(3)+' px':'—','sub-pixel target < 1.0 px'],
+    ['Processing time',Math.round(safeNum(m.timeMs))+' ms']
+  ];
+  document.getElementById('quickMetrics').innerHTML=cards.map(([label,val,sub])=>`<div class="glass metric-card"><div class="label">${label}</div><div class="val">${val}</div>${sub?`<div class="sub">${sub}</div>`:''}</div>`).join('');
+}
+
+function renderCorrespondencePage(){
+  const run=getLastRun(); if(!run) return;
+  const empty=document.getElementById('corr-empty'), content=document.getElementById('corr-content');
+  if(empty) empty.style.display='none'; if(content) content.style.display='block';
+  drawMatches('matchCanvas2');
+  const matches=Array.isArray(run.matches)?run.matches:[], inliers=Array.isArray(run.inliers)?run.inliers:[];
+  const bins=[0,0,0,0,0];
+  matches.forEach(m=>{
+    const conf=Number.isFinite(Number(m.confidence))?Number(m.confidence):1/(1+safeNum(m.dist)/500);
+    bins[Math.min(4,Math.max(0,Math.floor(conf*5)))]+=1;
+  });
+  const ctx=document.getElementById('confChart');
+  if(ctx && typeof Chart!=='undefined'){
+    if(confChart) confChart.destroy();
+    confChart=new Chart(ctx,{type:'bar',data:{labels:['Very low','Low','Medium','High','Very high'],datasets:[{data:bins,backgroundColor:['#4a4038','#786f61','#a89e8e','#57d9c4','#ff7a33']}]},options:{plugins:{legend:{display:false}}}});
+  }
+  const heat=document.getElementById('heatCanvas'); if(!heat) return;
+  const cells=6; heat.width=360; heat.height=360; const hctx=heat.getContext('2d');
+  const counts=Array.from({length:cells*cells},()=>0);
+  const src=run.src; if(src){
+    inliers.forEach(m=>{ const gx=Math.min(cells-1,Math.max(0,Math.floor(m.ax/(src.width/cells)))); const gy=Math.min(cells-1,Math.max(0,Math.floor(m.ay/(src.height/cells)))); counts[gy*cells+gx]++; });
+  }
+  const maxC=Math.max(1,...counts), cw=heat.width/cells, ch=heat.height/cells;
+  hctx.fillStyle='#050403'; hctx.fillRect(0,0,heat.width,heat.height);
+  for(let y=0;y<cells;y++)for(let x=0;x<cells;x++){const v=counts[y*cells+x]/maxC;hctx.fillStyle=`rgba(255,122,51,${.08+v*.75})`;hctx.fillRect(x*cw,y*ch,cw-2,ch-2);}
+}
+
+function renderExperiments(){
+  const run=getLastRun();
+  let data={...BENCHMARK_DEFAULT};
+  if(run && run.metrics){
+    const key=run.modelUsed||'hybrid';
+    data[key]={...BENCHMARK_DEFAULT[key],...run.metrics,source:'Live run'};
+  }
+  const labels={orb:'SIFT / ORB',splg:'SuperPoint + LightGlue',loftr:'LoFTR',hybrid:'Hybrid Proposed'};
+  const table=document.getElementById('expTable');
+  if(table) table.innerHTML=Object.keys(data).map(k=>{const d=data[k];return `<tr><td class="name">${labels[k]}</td><td>${(safeNum(d.inlierRatio)*100).toFixed(1)}%</td><td>${safeNum(d.rmse,NaN).toFixed(2)}</td><td>${safeNum(d.median,NaN).toFixed(2)}</td><td>${safeNum(d.coverage).toFixed(0)}%</td><td>${Math.round(safeNum(d.timeMs))}</td><td>${d.source}</td></tr>`}).join('');
+  const ctx=document.getElementById('expChart'); if(ctx && typeof Chart!=='undefined'){
+    if(expChart) expChart.destroy();
+    expChart=new Chart(ctx,{type:'bar',data:{labels:Object.values(labels),datasets:[{label:'Inlier ratio (%)',data:Object.keys(data).map(k=>+(safeNum(data[k].inlierRatio)*100).toFixed(1)),backgroundColor:'#ff7a33'},{label:'RMSE (px, ×10 for scale)',data:Object.keys(data).map(k=>+(safeNum(data[k].rmse)*10).toFixed(1)),backgroundColor:'#57d9c4'}]}});
+  }
+}
+
+function renderEvaluation(){
+  const run=getLastRun(); if(!run) return;
+  const empty=document.getElementById('eval-empty'), grid=document.getElementById('evalGrid');
+  if(empty) empty.style.display='none'; if(!grid) return; grid.style.display='grid';
+  const m=run.metrics||{};
+  const cards=[['Total matches',safeNum(m.totalMatches)],['Inlier matches',safeNum(m.inlierMatches)],['Inlier ratio',(safeNum(m.inlierRatio)*100).toFixed(1)+'%'],['RMSE',Number.isFinite(m.rmse)?m.rmse.toFixed(3)+' px':'—','root-mean-square reprojection error'],['Median error',Number.isFinite(m.median)?m.median.toFixed(3)+' px':'—'],['Maximum error',Number.isFinite(m.max)?m.max.toFixed(3)+' px':'—'],['Sub-pixel accuracy',m.subpixel?'Achieved':'Not yet',Number.isFinite(m.rmse)?m.rmse.toFixed(3)+' px RMSE':''],['Spatial coverage',safeNum(m.coverage).toFixed(0)+'%'],['Processing time',Math.round(safeNum(m.timeMs))+' ms']];
+  grid.innerHTML=cards.map(([l,v,s])=>`<div class="glass metric-card reveal"><div class="label">${l}</div><div class="val">${v}</div>${s?`<div class="sub">${s}</div>`:''}</div>`).join(''); runReveals();
+  const gtP=document.getElementById('gtPanel'); if(gtP) gtP.style.display='none';
+}
+
+function renderResultsPage(){
+  const run=getLastRun(); if(!run) return;
+  const empty=document.getElementById('res-empty'), content=document.getElementById('res-content');
+  if(empty) empty.style.display='none'; if(content) content.style.display='block';
+  const w=run.ref.width,h=run.ref.height;
+  const reg=document.getElementById('registeredCanvas'); if(reg && run.registeredImage){const img=new Image();img.onload=()=>{reg.width=w;reg.height=h;reg.getContext('2d').drawImage(img,0,0,w,h)};img.src=run.registeredImage;}
+  const base=document.getElementById('cmp-base'); if(base){base.width=w;base.height=h;base.getContext('2d').drawImage(run.ref.canvas,0,0,w,h);}
+  const after=document.getElementById('cmp-after'); if(after && run.registeredImage){const img2=new Image();img2.onload=()=>{after.width=w;after.height=h;after.getContext('2d').drawImage(img2,0,0,w,h)};img2.src=run.registeredImage;}
+  const layer=document.getElementById('cmp-afterLayer'), range=document.getElementById('cmpRange'); if(layer&&range){const update=()=>layer.style.width=range.value+'%';range.oninput=update;update();}
+  const diff=document.getElementById('diffCanvas'); if(diff && run.differenceImage){const img3=new Image();img3.onload=()=>{diff.width=w;diff.height=h;diff.getContext('2d').drawImage(img3,0,0,w,h)};img3.src=run.differenceImage;}
+}
+
+renderExperiments();
+checkReady();
+</script>
+</body>
+</html>

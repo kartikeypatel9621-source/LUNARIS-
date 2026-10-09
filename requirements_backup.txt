@@ -1,0 +1,19 @@
+# --- core (always required) ---
+fastapi==0.141.1
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+opencv-python-headless==4.13.0.88
+numpy>=2.0
+pillow>=10.0
+scipy>=1.11
+
+# --- deep-learning engines (optional but recommended) ---
+# Needed for the "SuperPoint + LightGlue" and "Hybrid Proposed Model" engines.
+# CPU-only install shown here; swap for a CUDA build of torch if you have a GPU.
+torch>=2.4
+git+https://github.com/cvg/LightGlue.git
+
+# Needed only for the "LoFTR" engine. Its pretrained checkpoint is hosted on
+# a university server (cmp.felk.cvut.cz) that some networks block -- see
+# app/pipeline/deep_loftr.py for a local-checkpoint override if so.
+kornia>=0.7
